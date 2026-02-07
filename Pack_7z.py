@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 def auto_pack_interactive():
-    # --- 1. 获取用户配置 ---
+    # --- 获取用户配置 ---
     print("=== 自动分卷加密打包程序 ===")
     
     password = input("请输入加密密码: ").strip()
@@ -27,7 +27,7 @@ def auto_pack_interactive():
         print(f"无法创建目录: {e}")
         return
 
-    # --- 2. 核心参数配置 ---
+    # --- 核心参数配置 ---
     # 7z 命令 (需确保 7z 在环境变量 PATH 中，或者修改此处为绝对路径)
     ARCHIVER_CMD = '7z' 
     
@@ -40,7 +40,7 @@ def auto_pack_interactive():
     # 分卷参数: 1955MB
     SPLIT_ARG = '-v1955m'
 
-    # --- 3. 扫描与处理 ---
+    # --- 扫描与处理 ---
     # 获取当前目录下所有匹配的视频文件
     files = [f for f in os.listdir('.') if os.path.isfile(f) and f.lower().endswith(VIDEO_EXTS)]
     
