@@ -1,0 +1,21 @@
+# 忽略 Python 缓存
+__pycache__/
+*.py[cod]
+
+# 忽略视频源文件
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.flv
+*.wmv
+*.ts
+*.webm
+*.iso
+
+# 忽略输出的压缩包
+*.7z
+
+# 忽略系统文件
+Thumbs.db
+Desktop.ini
