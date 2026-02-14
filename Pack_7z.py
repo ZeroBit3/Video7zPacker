@@ -34,11 +34,11 @@ def auto_pack_interactive():
     # 支持的视频格式扩展名
     VIDEO_EXTS = ('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.m4v', '.ts', '.webm', '.iso')
     
-    # 触发分卷的阈值: 2GB (字节)
-    SIZE_THRESHOLD = 2 * 1024 * 1024 * 1024 
+    # 触发分卷的阈值: 1.8GB (字节)
+    SIZE_THRESHOLD = 1.8 * 1024 * 1024 * 1024 
     
-    # 分卷参数: 1955MB
-    SPLIT_ARG = '-v1955m'
+    # 分卷参数: 1805MB
+    SPLIT_ARG = '-v1805m'
 
     # --- 扫描与处理 ---
     # 获取当前目录下所有匹配的视频文件
