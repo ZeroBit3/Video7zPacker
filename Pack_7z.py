@@ -2,9 +2,9 @@ import os
 import re
 import subprocess
 import sys
+import random
 
 def auto_pack_interactive():
-    # --- 获取用户配置 ---
     print("=== 自动分卷加密打包程序 ===")
     
     password = input("请输入加密密码: ").strip()
@@ -13,35 +13,22 @@ def auto_pack_interactive():
         return
 
     output_dir = input("请输入输出目录路径 (例如 D:\\Backup): ").strip()
-    # 去除可能存在的引号（针对直接拖入文件夹路径的情况）
     output_dir = output_dir.strip('"').strip("'")
     
     if not output_dir:
         print("错误: 输出目录不能为空")
         return
 
-    # 尝试创建输出目录
     try:
         os.makedirs(output_dir, exist_ok=True)
     except Exception as e:
         print(f"无法创建目录: {e}")
         return
 
-    # --- 核心参数配置 ---
-    # 7z 命令 (需确保 7z 在环境变量 PATH 中，或者修改此处为绝对路径)
     ARCHIVER_CMD = '7z' 
-    
-    # 支持的视频格式扩展名
     VIDEO_EXTS = ('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.m4v', '.ts', '.webm', '.iso')
-    
-    # 触发分卷的阈值: 1.8GB (字节)
     SIZE_THRESHOLD = 1.8 * 1024 * 1024 * 1024 
-    
-    # 分卷参数: 1805MB
-    SPLIT_ARG = '-v1805m'
 
-    # --- 扫描与处理 ---
-    # 获取当前目录下所有匹配的视频文件
     files = [f for f in os.listdir('.') if os.path.isfile(f) and f.lower().endswith(VIDEO_EXTS)]
     
     if not files:
@@ -58,39 +45,28 @@ def auto_pack_interactive():
         file_size = os.path.getsize(file_path)
         base_name = os.path.splitext(filename)[0]
         
-        # --- 智能集数识别逻辑 ---
         ep_number = None
         
-        # 策略A: 匹配 "E01", "EP01" (忽略大小写)
         match_ep = re.search(r'(?i)e(?:p)?(\d{1,4})', base_name)
-        
-        # 策略B: 匹配 "第xx集", "第xx话"
         match_ch = re.search(r'第(\d+)[集话]', base_name)
-        
-        # 策略C: 匹配被符号包裹或独立的数字 (如 [01], - 01 -, (01))
-        # 排除 19xx/20xx 这种年份数字
         match_num_list = re.findall(r'(?:^|\D)(\d{1,4})(?:$|\D)', base_name)
         
         valid_nums = []
         if match_num_list:
             for num in match_num_list:
-                # 过滤掉常见的年份 (1980-2030) 和分辨率 (1080, 720, 2160)
                 if len(num) == 4 and (num.startswith('19') or num.startswith('20')):
                     continue
                 if num in ['1080', '720', '2160', '480']:
                     continue
                 valid_nums.append(num)
 
-        # 判定优先级
         if match_ep:
             ep_number = match_ep.group(1)
         elif match_ch:
             ep_number = match_ch.group(1)
         elif valid_nums:
-            # 取第一个看起来像集数的数字
             ep_number = valid_nums[0]
 
-        # --- 交互确认 ---
         final_name = ""
         should_pack = True
 
@@ -107,35 +83,34 @@ def auto_pack_interactive():
                 should_pack = False
                 print("    > 已跳过")
             else:
-                # 用户输入了自定义名称
                 custom_name = choice
                 if not custom_name.endswith('.7z'):
                     custom_name += '.7z'
                 final_name = custom_name
 
-        # --- 执行打包命令 ---
         if should_pack:
             output_file_path = os.path.join(output_dir, final_name)
             
             cmd = [
                 ARCHIVER_CMD, 'a',
                 '-t7z', 
-                '-mx=0',           # 存储模式 (不压缩)
-                f'-p{password}',   # 密码
-                '-mhe=on',         # 加密文件名
+                '-mx=0',           
+                f'-p{password}',   
+                '-mhe=on',         
                 output_file_path,
                 file_path
             ]
             
-            # 检测大小是否需要分卷
             if file_size > SIZE_THRESHOLD:
-                print(f"    > 文件大小 {(file_size / (1024**3)):.2f} GB，启用分卷 ({SPLIT_ARG})")
-                cmd.append(SPLIT_ARG)
-            
-            print(f"    > 目标路径: {output_file_path}")
+                split_gib = random.triangular(1.65, 1.8, 1.8)
+                split_mb = int(split_gib * 1024)
+                split_arg = f'-v{split_mb}m'
+                print(f"    > 文件大小 {(file_size / (1024**3)):.2f} GB，启用分卷 ({split_arg})")
+                cmd.append(split_arg)
+            else:
+                print(f"    > 目标路径: {output_file_path}")
             
             try:
-                # 调用 7z，直接显示输出以便查看进度
                 subprocess.run(cmd, check=True)
                 print(f"    [√] 打包成功")
             except FileNotFoundError:
