@@ -10,11 +10,11 @@
 
 ## 环境要求
 1. **Python 3.x**（依赖内置 `os`, `re`, `subprocess`, `sys`, `random` 模块）
-2. **7-Zip**: 必须安装 7-Zip 并将 `7z.exe` 所在的目录添加到系统的 `PATH` 环境变量中。
+2. **7-Zip**: 必须安装 7-Zip 并将 `7z.exe` 所在的目录添加到系统的 `PATH` 环境变量中（我这里是安装后默认添加的）。
 
 ## 使用方法
 ```bash
-python pack_7z.py
+python Pack_7z.py
 ```
 
 ## 注意事项
