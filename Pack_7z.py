@@ -93,7 +93,7 @@ def auto_pack_interactive():
             output_file_path = os.path.join(output_dir, final_name)
             is_split = file_size > SIZE_THRESHOLD
             
-            # 检查文件是否已存在 (兼顾普通压缩包和 .001 分卷)
+            # 检查文件是否已存在 (兼顾普通压缩包和 .001 分卷) mark
             check_paths = [output_file_path, output_file_path + ".001"]
             if any(os.path.exists(p) for p in check_paths):
                 print(f"    ! 警告: 目标目录已存在同名压缩包 ({final_name})")
