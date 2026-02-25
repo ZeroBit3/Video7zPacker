@@ -3,6 +3,7 @@ import re
 import subprocess
 import sys
 import random
+import glob
 
 def auto_pack_interactive():
     print("=== 自动分卷加密打包程序 ===")
@@ -90,6 +91,26 @@ def auto_pack_interactive():
 
         if should_pack:
             output_file_path = os.path.join(output_dir, final_name)
+            is_split = file_size > SIZE_THRESHOLD
+            
+            # 检查文件是否已存在 (兼顾普通压缩包和 .001 分卷)
+            check_paths = [output_file_path, output_file_path + ".001"]
+            if any(os.path.exists(p) for p in check_paths):
+                print(f"    ! 警告: 目标目录已存在同名压缩包 ({final_name})")
+                overwrite = input("    ? 是否覆盖原有文件? (y/n，按 y 覆盖，其他键跳过): ").strip().lower()
+                
+                if overwrite == 'y':
+                    # 删除旧文件，防止 7z 报错或错误地将新文件追加进旧压缩包中
+                    old_files = glob.glob(output_file_path + "*")
+                    for old_f in old_files:
+                        try:
+                            os.remove(old_f)
+                        except OSError:
+                            pass
+                    print("    > 已清理旧文件，准备重新打包...")
+                else:
+                    print("    > 已跳过该文件")
+                    continue
             
             cmd = [
                 ARCHIVER_CMD, 'a',
@@ -101,7 +122,7 @@ def auto_pack_interactive():
                 file_path
             ]
             
-            if file_size > SIZE_THRESHOLD:
+            if is_split:
                 split_gib = random.triangular(1.65, 1.8, 1.8)
                 split_mb = int(split_gib * 1024)
                 split_arg = f'-v{split_mb}m'
