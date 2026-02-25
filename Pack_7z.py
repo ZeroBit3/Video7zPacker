@@ -93,7 +93,7 @@ def auto_pack_interactive():
             output_file_path = os.path.join(output_dir, final_name)
             is_split = file_size > SIZE_THRESHOLD
             
-            # 检查文件是否已存在 (兼顾普通压缩包和 .001 分卷) mark
+            # 检查文件是否已存在 (兼顾普通压缩包和 .001 分卷)
             check_paths = [output_file_path, output_file_path + ".001"]
             if any(os.path.exists(p) for p in check_paths):
                 print(f"    ! 警告: 目标目录已存在同名压缩包 ({final_name})")
@@ -115,9 +115,9 @@ def auto_pack_interactive():
             cmd = [
                 ARCHIVER_CMD, 'a',
                 '-t7z', 
-                '-mx=0',           
-                f'-p{password}',   
-                '-mhe=on',         
+                '-mx=0',            
+                f'-p{password}',    
+                '-mhe=on',          
                 output_file_path,
                 file_path
             ]
@@ -127,7 +127,8 @@ def auto_pack_interactive():
                 split_mb = int(split_gib * 1024)
                 split_arg = f'-v{split_mb}m'
                 print(f"    > 文件大小 {(file_size / (1024**3)):.2f} GB，启用分卷 ({split_arg})")
-                cmd.append(split_arg)
+                # 将分卷参数插入到 output_file_path 之前 (索引 -2)
+                cmd.insert(-2, split_arg)
             else:
                 print(f"    > 目标路径: {output_file_path}")
             
