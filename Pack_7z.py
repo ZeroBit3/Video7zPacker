@@ -4,10 +4,27 @@ import subprocess
 import sys
 import random
 import glob
+import shutil
+
+def get_7z_executable():
+    if shutil.which('7z'):
+        return '7z'
+    
+    fallback_path = r"C:\Program Files\7-Zip\7z.exe"
+    if os.path.exists(fallback_path):
+        return fallback_path
+        
+    return None
 
 def auto_pack_interactive():
     print("=== 自动分卷加密打包程序 ===")
     
+    ARCHIVER_CMD = get_7z_executable()
+    if not ARCHIVER_CMD:
+        print("错误: 系统找不到 '7z' 命令，且默认路径 C:\\Program Files\\7-Zip\\7z.exe 不存在。")
+        print("请确认已安装 7-Zip。")
+        return
+
     password = input("请输入加密密码: ").strip()
     if not password:
         print("错误: 密码不能为空")
@@ -26,7 +43,6 @@ def auto_pack_interactive():
         print(f"无法创建目录: {e}")
         return
 
-    ARCHIVER_CMD = '7z' 
     VIDEO_EXTS = ('.mp4', '.mkv', '.avi', '.mov', '.flv', '.wmv', '.m4v', '.ts', '.webm', '.iso')
     SIZE_THRESHOLD = 1.8 * 1024 * 1024 * 1024 
 
@@ -93,14 +109,12 @@ def auto_pack_interactive():
             output_file_path = os.path.join(output_dir, final_name)
             is_split = file_size > SIZE_THRESHOLD
             
-            # 检查文件是否已存在 (兼顾普通压缩包和 .001 分卷)
             check_paths = [output_file_path, output_file_path + ".001"]
             if any(os.path.exists(p) for p in check_paths):
                 print(f"    ! 警告: 目标目录已存在同名压缩包 ({final_name})")
                 overwrite = input("    ? 是否覆盖原有文件? (y/n，按 y 覆盖，其他键跳过): ").strip().lower()
                 
                 if overwrite == 'y':
-                    # 删除旧文件，防止 7z 报错或错误地将新文件追加进旧压缩包中
                     old_files = glob.glob(output_file_path + "*")
                     for old_f in old_files:
                         try:
@@ -127,7 +141,6 @@ def auto_pack_interactive():
                 split_mb = int(split_gib * 1024)
                 split_arg = f'-v{split_mb}m'
                 print(f"    > 文件大小 {(file_size / (1024**3)):.2f} GB，启用分卷 ({split_arg})")
-                # 将分卷参数插入到 output_file_path 之前 (索引 -2)
                 cmd.insert(-2, split_arg)
             else:
                 print(f"    > 目标路径: {output_file_path}")
@@ -135,9 +148,6 @@ def auto_pack_interactive():
             try:
                 subprocess.run(cmd, check=True)
                 print(f"    [√] 打包成功")
-            except FileNotFoundError:
-                print("    [X] 错误: 系统找不到 '7z' 命令，请确认已安装并添加到环境变量 PATH 中。")
-                break
             except subprocess.CalledProcessError as e:
                 print(f"    [X] 7z 运行出错: {e}")
             except Exception as e:
