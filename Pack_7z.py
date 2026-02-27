@@ -64,30 +64,45 @@ def auto_pack_interactive():
         
         ep_number = None
         
-        match_ep = re.search(r'(?i)e(?:p)?(\d{1,4})', base_name)
-        match_ch = re.search(r'第(\d+)[集话]', base_name)
-        match_num_list = re.findall(r'(?:^|\D)(\d{1,4})(?:$|\D)', base_name)
+        # 优先进行强特征匹配 (例如: EP01, e02, 第3集, 第04话)
+        match_ep = re.search(r'(?i)e(?:p)?\s*0*(\d{1,4})', base_name)
+        match_ch = re.search(r'第\s*0*(\d+)\s*[集话]', base_name)
         
-        valid_nums = []
-        if match_num_list:
-            for num in match_num_list:
-                if len(num) == 4 and (num.startswith('19') or num.startswith('20')):
-                    continue
-                if num in ['1080', '720', '2160', '480']:
-                    continue
-                valid_nums.append(num)
-
         if match_ep:
             ep_number = match_ep.group(1)
         elif match_ch:
             ep_number = match_ch.group(1)
-        elif valid_nums:
-            ep_number = valid_nums[0]
+        else:
+            # 如果强特征匹配失败，先清洗文件名再提取纯数字
+            clean_name = base_name
+            
+            # 定义干扰项正则模式
+            noise_patterns = [
+                r'(?i)1080[pi]?|720[pi]?|2160[pi]?|480[pi]?|4k|8k',  # 分辨率
+                r'(?i)x264|h264|x265|h265|hevc|av1|avc',             # 视频编码
+                r'(?i)aac|ac3|flac|mp3|dts',                         # 音频格式
+                r'(?i)10bit|8bit|hdr|web-dl|bdrip|bluray',           # 压制参数和片源
+                r'\b(?:19|20)\d{2}\b'                                # 年份 (匹配独立的 19xx 或 20xx)
+            ]
+            
+            # 执行清洗，将干扰项替换为空格
+            for pattern in noise_patterns:
+                clean_name = re.sub(pattern, ' ', clean_name)
+            
+            # 在清洗后的干净字符串中寻找独立的数字
+            # (?<![a-zA-Z\d]) 和 (?![a-zA-Z\d]) 确保提取的是纯数字，不与字母或其他数字粘连
+            match_num_list = re.findall(r'(?<![a-zA-Z\d])(\d{1,4})(?![a-zA-Z\d])', clean_name)
+            
+            if match_num_list:
+                # 取第一个出现的独立数字，通常这就是集数
+                ep_number = match_num_list[0]
 
         final_name = ""
         should_pack = True
 
         if ep_number:
+            # 转换为整型再转回字符串可以去除前导零(如 01 变 1)，如果你想保留前导零或统一补零，可使用 .zfill(2)
+            # ep_number = str(int(ep_number)).zfill(2)
             print(f"    > 识别到集数: {ep_number}")
             final_name = f"{ep_number}.7z"
         else:
