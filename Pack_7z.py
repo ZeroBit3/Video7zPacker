@@ -5,6 +5,7 @@ import sys
 import random
 import glob
 import shutil
+import configparser
 
 def get_7z_executable():
     if shutil.which('7z'):
@@ -25,14 +26,37 @@ def auto_pack_interactive():
         print("请确认已安装 7-Zip。")
         return
 
-    password = input("请输入加密密码: ").strip()
-    if not password:
-        print("错误: 密码不能为空")
-        return
-
-    output_dir = input("请输入输出目录路径 (例如 D:\\Backup): ").strip()
-    output_dir = output_dir.strip('"').strip("'")
+    # --- 读取配置文件 ---
+    config = configparser.ConfigParser()
+    config_file = 'config.ini'
     
+    conf_password = ""
+    conf_output_dir = ""
+    conf_auto_overwrite = False
+    conf_auto_name_fallback = "" 
+    
+    if os.path.exists(config_file):
+        config.read(config_file, encoding='utf-8')
+        if 'Settings' in config:
+            conf_password = config['Settings'].get('password', '').strip()
+            conf_output_dir = config['Settings'].get('output_dir', '').strip()
+            conf_auto_overwrite = config['Settings'].getboolean('auto_overwrite', fallback=False)
+            conf_auto_name_fallback = config['Settings'].get('auto_name_fallback', fallback='').strip().lower()
+            print(f"[+] 检测到 {config_file}，已加载静默配置。")
+
+    # --- 变量初始化（优先使用配置，否则回退到交互） ---
+    password = conf_password
+    if not password:
+        password = input("请输入加密密码: ").strip()
+        if not password:
+            print("错误: 密码不能为空")
+            return
+
+    output_dir = conf_output_dir
+    if not output_dir:
+        output_dir = input("请输入输出目录路径 (例如 D:\\Backup): ").strip()
+        
+    output_dir = output_dir.strip('"').strip("'")
     if not output_dir:
         print("错误: 输出目录不能为空")
         return
@@ -101,24 +125,32 @@ def auto_pack_interactive():
         should_pack = True
 
         if ep_number:
-            # 转换为整型再转回字符串可以去除前导零(如 01 变 1)，如果你想保留前导零或统一补零，可使用 .zfill(2)
+            # 转换为整型再转回字符串可以去除前导零(如 01 变 1)，如果想保留前导零或统一补零，可使用 .zfill(2)
             # ep_number = str(int(ep_number)).zfill(2)
             print(f"    > 识别到集数: {ep_number}")
             final_name = f"{ep_number}.7z"
         else:
             print("    ! 警告: 未能自动识别集数特征")
-            choice = input(f"    ? 是否使用原文件名 '{base_name}' 打包? (y/n/输入新名称): ").strip()
             
-            if choice.lower() == 'y':
+            # 引入配置文件的静默判断
+            if conf_auto_name_fallback == 'y':
                 final_name = f"{base_name}.7z"
-            elif choice.lower() == 'n':
+                print(f"    > 根据配置，自动使用原文件名: {final_name}")
+            elif conf_auto_name_fallback == 'n':
                 should_pack = False
-                print("    > 已跳过")
+                print("    > 根据配置，自动跳过该文件")
             else:
-                custom_name = choice
-                if not custom_name.endswith('.7z'):
-                    custom_name += '.7z'
-                final_name = custom_name
+                choice = input(f"    ? 是否使用原文件名 '{base_name}' 打包? (y/n/输入新名称): ").strip()
+                if choice.lower() == 'y':
+                    final_name = f"{base_name}.7z"
+                elif choice.lower() == 'n':
+                    should_pack = False
+                    print("    > 已跳过")
+                else:
+                    custom_name = choice
+                    if not custom_name.endswith('.7z'):
+                        custom_name += '.7z'
+                    final_name = custom_name
 
         if should_pack:
             output_file_path = os.path.join(output_dir, final_name)
@@ -127,7 +159,13 @@ def auto_pack_interactive():
             check_paths = [output_file_path, output_file_path + ".001"]
             if any(os.path.exists(p) for p in check_paths):
                 print(f"    ! 警告: 目标目录已存在同名压缩包 ({final_name})")
-                overwrite = input("    ? 是否覆盖原有文件? (y/n，按 y 覆盖，其他键跳过): ").strip().lower()
+                
+                # 引入配置文件的覆盖判断
+                if conf_auto_overwrite:
+                    overwrite = 'y'
+                    print("    > 根据配置，自动执行覆盖")
+                else:
+                    overwrite = input("    ? 是否覆盖原有文件? (y/n，按 y 覆盖，其他键跳过): ").strip().lower()
                 
                 if overwrite == 'y':
                     old_files = glob.glob(output_file_path + "*")
