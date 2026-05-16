@@ -88,7 +88,7 @@ def auto_pack_interactive():
         
         ep_number = None
         
-        # 优先进行强特征匹配 (例如: EP01, e02, 第3集, 第04话)
+        # 优先进行强特征匹配
         match_ep = re.search(r'(?i)e(?:p)?\s*0*(\d{1,4})', base_name)
         match_ch = re.search(r'第\s*0*(\d+)\s*[集话]', base_name)
         
@@ -97,42 +97,33 @@ def auto_pack_interactive():
         elif match_ch:
             ep_number = match_ch.group(1)
         else:
-            # 如果强特征匹配失败，先清洗文件名再提取纯数字
             clean_name = base_name
             
-            # 定义干扰项正则模式
             noise_patterns = [
-                r'(?i)1080[pi]?|720[pi]?|2160[pi]?|480[pi]?|4k|8k',  # 分辨率
-                r'(?i)x264|h264|x265|h265|hevc|av1|avc',             # 视频编码
-                r'(?i)aac|ac3|flac|mp3|dts',                         # 音频格式
-                r'(?i)10bit|8bit|hdr|web-dl|bdrip|bluray',           # 压制参数和片源
-                r'\b(?:19|20)\d{2}\b'                                # 年份 (匹配独立的 19xx 或 20xx)
+                r'(?i)1080[pi]?|720[pi]?|2160[pi]?|480[pi]?|4k|8k',  
+                r'(?i)x264|h264|x265|h265|hevc|av1|avc',             
+                r'(?i)aac|ac3|flac|mp3|dts',                         
+                r'(?i)10bit|8bit|hdr|web-dl|bdrip|bluray',           
+                r'\b(?:19|20)\d{2}\b'                                
             ]
             
-            # 执行清洗，将干扰项替换为空格
             for pattern in noise_patterns:
                 clean_name = re.sub(pattern, ' ', clean_name)
             
-            # 在清洗后的干净字符串中寻找独立的数字
-            # (?<![a-zA-Z\d]) 和 (?![a-zA-Z\d]) 确保提取的是纯数字，不与字母或其他数字粘连
             match_num_list = re.findall(r'(?<![a-zA-Z\d])(\d{1,4})(?![a-zA-Z\d])', clean_name)
             
             if match_num_list:
-                # 取第一个出现的独立数字，通常这就是集数
                 ep_number = match_num_list[0]
 
         final_name = ""
         should_pack = True
 
         if ep_number:
-            # 转换为整型再转回字符串可以去除前导零(如 01 变 1)，如果想保留前导零或统一补零，可使用 .zfill(2)
-            # ep_number = str(int(ep_number)).zfill(2)
             print(f"    > 识别到集数: {ep_number}")
             final_name = f"{ep_number}.7z"
         else:
             print("    ! 警告: 未能自动识别集数特征")
             
-            # 引入配置文件的静默判断
             if conf_auto_name_fallback == 'y':
                 final_name = f"{base_name}.7z"
                 print(f"    > 根据配置，自动使用原文件名: {final_name}")
@@ -160,7 +151,6 @@ def auto_pack_interactive():
             if any(os.path.exists(p) for p in check_paths):
                 print(f"    ! 警告: 目标目录已存在同名压缩包 ({final_name})")
                 
-                # 引入配置文件的覆盖判断
                 if conf_auto_overwrite:
                     overwrite = 'y'
                     print("    > 根据配置，自动执行覆盖")
@@ -179,6 +169,7 @@ def auto_pack_interactive():
                     print("    > 已跳过该文件")
                     continue
             
+            # 初始化基础命令
             cmd = [
                 ARCHIVER_CMD, 'a',
                 '-t7z', 
@@ -190,11 +181,22 @@ def auto_pack_interactive():
             ]
             
             if is_split:
-                split_gib = random.triangular(1.65, 1.8, 1.8)
-                split_mb = int(split_gib * 1024)
-                split_arg = f'-v{split_mb}m'
-                print(f"    > 文件大小 {(file_size / (1024**3)):.2f} GB，启用分卷 ({split_arg})")
-                cmd.insert(-2, split_arg)
+                # 估算所需的最大分卷数量
+                # 以 1GB (1024^3) 作为估算底线，再加 5 个作为冗余，确保生成的参数足够用
+                estimated_vols = int(file_size / (1024 ** 3)) + 5
+                
+                split_args = []
+                # 循环生成多个大小不一的 -v 参数
+                for _ in range(estimated_vols):
+                    # 目前设定在 1.65 GB 到 1.8 GB 之间随机
+                    split_gib = random.triangular(1.65, 1.8, 1.8)
+                    split_mb = int(split_gib * 1024)
+                    split_args.append(f'-v{split_mb}m')
+                
+                print(f"    > 文件大小 {(file_size / (1024**3)):.2f} GB，启用不规则随机分卷")
+                
+                # 将所有生成的 -v 参数插入到 cmd 列表中
+                cmd = cmd[:-2] + split_args + cmd[-2:]
             else:
                 print(f"    > 目标路径: {output_file_path}")
             
