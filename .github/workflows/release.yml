@@ -3,7 +3,10 @@ name: Build and Release
 on:
   push:
     tags:
-      - 'v*' # 当你推送以 v 开头的标签（如 v0.0.17）时触发
+      - 'v*' # 监听以 v 开头的标签推送
+
+permissions:
+  contents: write # 必须赋予写权限，否则流水线无法自动在仓库创建 Release
 
 jobs:
   build:
@@ -16,22 +19,21 @@ jobs:
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
-        python-version: '3.10' 
+        python-version: '3.10'
 
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install pyinstaller
-        # 如果有其他依赖，解除下一行的注释
-        # pip install -r requirements.txt
 
-    - name: Build EXE
+    - name: Build EXEs
       run: |
-        pyinstaller --onefile --name=Video7zPacker Pack_7z_movie.py
+        pyinstaller --onefile --name=Video7zPacker_Movie Pack_7z_movie.py
+        pyinstaller --onefile --name=Video7zPacker_Teleplay Pack_teleplay.py
 
     - name: Upload Release Asset
       uses: softprops/action-gh-release@v2
       with:
-        files: dist/Video7zPacker.exe
+        files: dist/*.exe # 一次性将刚才打包出的两个 exe 全部上传
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
