@@ -1,4 +1,24 @@
-# Auto 7z Interactive Packer
+<div align="center">
+
+📦
+
+# Video7zPacker
+
+自动化、动态不规则分卷的加密打包工具集<br>
+基于 Python 构建，驱动 7-Zip 核心进行物理级防和谐处理
+
+[反馈问题](https://github.com/zerobit3/Video7zPacker/issues) · [更新日志](https://github.com/zerobit3/Video7zPacker/releases)
+
+[![Version](https://img.shields.io/github/v/release/zerobit3/Video7zPacker)](https://github.com/zerobit3/Video7zPacker/releases/latest)
+[![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+![Stars](https://img.shields.io/github/stars/zerobit3/Video7zPacker?color=ffcb47&labelColor=black)<br>
+![Python 3.10](https://img.shields.io/badge/Python-3.10-blue?logo=python)
+![7-Zip](https://img.shields.io/badge/Core-7--Zip-%2324C8D8)
+![GitHub Actions](https://img.shields.io/badge/Build-Actions-%23000000?logo=github-actions)
+
+</div>
+
+---
 
 这是一个基于 Python 的自动化分卷加密打包工具集。通过调用系统底层的 7-Zip 命令，提供针对**剧集视频**和**电影/资料文件夹**的两套独立自动化打包方案。核心特色在于支持动态、不规则的分卷大小，以应对网盘限制并增加文件特征差异。
 
