@@ -28,7 +28,7 @@ jobs:
 
     - name: Build EXEs
       run: |
-        pyinstaller --onefile --name=Video7zPacker_Movie Pack_7z_movie.py
+        pyinstaller --onefile --name=Video7zPacker_General Pack_7z_general.py
         pyinstaller --onefile --name=Video7zPacker_Teleplay Pack_teleplay.py
 
     - name: Upload Release Asset

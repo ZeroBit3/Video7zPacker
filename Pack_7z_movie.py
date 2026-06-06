@@ -138,6 +138,17 @@ def auto_pack_items():
         
         print("输入无效，请重新输入。")
 
+    # --- 命名方式选择 ---
+    print("\n=== 请选择分卷文件的命名方式 ===")
+    print("  [1] 纯数字命名 (例如 1.7z, 2.7z... 隐匿原名，增强保密性)")
+    print("  [2] 原名称命名 (直接使用原文件或文件夹的名字命名)")
+    naming_choice = ""
+    while True:
+        naming_choice = input("请输入对应的数字进行选择 (1 或 2): ").strip()
+        if naming_choice in ['1', '2']:
+            break
+        print("输入无效，请重新输入。")
+
     # --- 开始打包逻辑 ---
     print("\n准备开始处理...")
     
@@ -155,22 +166,38 @@ def auto_pack_items():
             
         print(f"[-] 正在分析{type_label}: {target_name}")
         
-        # --- 自动寻找可用的数字命名 (1.7z, 2.7z, ...) ---
-        base_num = 1
-        while True:
-            final_name = f"{base_num}.7z"
+        # --- 确定输出文件名 ---
+        if naming_choice == '1':
+            # 方式1：自动寻找可用的数字命名 (1.7z, 2.7z, ...)
+            base_num = 1
+            while True:
+                final_name = f"{base_num}.7z"
+                output_file_path = os.path.join(output_dir_abs, final_name)
+                if glob.glob(output_file_path + "*"):
+                    base_num += 1  # 如果被占用了，数字+1继续找
+                else:
+                    break
+        else:
+            # 方式2：使用原名称命名
+            if os.path.isdir(target_path):
+                base_name = target_name
+            else:
+                # 针对文件，去除原有的后缀名，使压缩包名更干净
+                base_name = os.path.splitext(target_name)[0]
+                
+            final_name = f"{base_name}.7z"
             output_file_path = os.path.join(output_dir_abs, final_name)
             
-            # 使用 glob 检查该前缀的文件是否存在 (如 1.7z, 1.7z.001 等)
-            existing_files = glob.glob(output_file_path + "*")
-            if existing_files:
-                base_num += 1  # 如果被占用了，数字+1继续找
-            else:
-                break
-        
+            # 检查输出目录中是否已有同名文件，防止相互覆盖
+            conflict_num = 1
+            while glob.glob(output_file_path + "*"):
+                final_name = f"{base_name}_{conflict_num}.7z"
+                output_file_path = os.path.join(output_dir_abs, final_name)
+                conflict_num += 1
+
         is_split = target_size > SIZE_THRESHOLD
         
-        # 初始化基础命令 (自动适配文件或文件夹输入)
+        # 初始化基础命令
         cmd = [
             ARCHIVER_CMD, 'a',
             '-t7z', 
@@ -191,15 +218,15 @@ def auto_pack_items():
                 split_args.append(f'-v{split_mb}m')
             
             print(f"    > {type_label}总大小 {(target_size / (1024**3)):.2f} GB，启用不规则随机分卷")
-            print(f"    > 输出保密路径: {output_file_path} (分卷)")
+            print(f"    > 输出路径: {output_file_path} (分卷)")
             
             cmd = cmd[:-2] + split_args + cmd[-2:]
         else:
-            print(f"    > 输出保密路径: {output_file_path}")
+            print(f"    > 输出路径: {output_file_path}")
         
         try:
             subprocess.run(cmd, check=True)
-            print(f"    [√] [{target_name}] 打包成功，已保密命名为 -> {final_name}")
+            print(f"    [√] [{target_name}] 打包成功，已命名为 -> {final_name}")
         except subprocess.CalledProcessError as e:
             print(f"    [X] 7z 运行出错: {e}")
         except Exception as e:
