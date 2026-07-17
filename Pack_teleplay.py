@@ -78,6 +78,17 @@ def auto_pack_interactive():
 
     print(f"扫描到 {len(files)} 个视频文件，准备处理...")
 
+    try:
+        abs_out_dir = os.path.abspath(output_dir)
+        if sys.platform == 'win32':
+            os.startfile(abs_out_dir)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', abs_out_dir])
+        else:
+            subprocess.Popen(['xdg-open', abs_out_dir])
+    except Exception as e:
+        print(f"自动打开目录失败: {e}")
+
     for filename in files:
         print(f"\n--------------------------------------------------")
         print(f"[-] 正在分析: {filename}")

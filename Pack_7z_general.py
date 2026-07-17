@@ -152,6 +152,16 @@ def auto_pack_items():
     # --- 开始打包逻辑 ---
     print("\n准备开始处理...")
     
+    try:
+        if sys.platform == 'win32':
+            os.startfile(output_dir_abs)
+        elif sys.platform == 'darwin':
+            subprocess.Popen(['open', output_dir_abs])
+        else:
+            subprocess.Popen(['xdg-open', output_dir_abs])
+    except Exception as e:
+        print(f"自动打开目录失败: {e}")
+    
     for target_name in selected_targets:
         print(f"\n--------------------------------------------------")
         target_path = os.path.abspath(target_name)
