@@ -5,6 +5,7 @@ import glob
 import shutil
 import configparser
 import sys
+import re
 
 def get_7z_executable():
     if shutil.which('7z'):
@@ -26,6 +27,38 @@ def get_dir_size(folder_path):
                 total_size += os.path.getsize(fp)
     return total_size
 
+def extract_episode_number(filename):
+    """提取文件或文件夹的集数（强特征匹配 + 特征降噪兜底）"""
+    base_name, _ = os.path.splitext(filename)
+    
+    # === 第一步：强特征匹配 ===
+    match_en = re.search(r'(?i)e(?:p)?\s*0*(\d{1,4})', base_name)
+    if match_en:
+        return match_en.group(1).zfill(2)
+        
+    match_zh = re.search(r'第\s*0*(\d+)\s*[集话]', base_name)
+    if match_zh:
+        return match_zh.group(1).zfill(2)
+        
+    # === 第二步：特征降噪与弱匹配 ===
+    noise_patterns = [
+        r'(?i)(1080p|2160p|4k|720p)',
+        r'(?i)(x264|x265|h264|h265|hevc|av1)',
+        r'(?i)(aac|flac|ac3|dts|mp3|ogg)',
+        r'(?i)(10bit|8bit|web-dl|bluray|bdrip|tvrip)',
+        r'(19\d{2}|20\d{2})'
+    ]
+    
+    cleaned_name = base_name
+    for pattern in noise_patterns:
+        cleaned_name = re.sub(pattern, ' ', cleaned_name)
+        
+    match_weak = re.search(r'(?<![a-zA-Z\d])(\d{1,4})(?![a-zA-Z\d])', cleaned_name)
+    if match_weak:
+        return match_weak.group(1).zfill(2)
+        
+    return None
+
 def auto_pack_items():
     print("=== 自动分卷加密打包程序 (文件/文件夹混合保密版) ===")
     
@@ -35,7 +68,6 @@ def auto_pack_items():
         print("请确认已安装 7-Zip。")
         return
 
-    # --- 读取或生成配置文件 ---
     config_file = 'config_movie.ini'
     config = configparser.ConfigParser()
     
@@ -61,7 +93,6 @@ def auto_pack_items():
             print("错误: 输出目录不能为空")
             output_dir = input("请输入输出目录路径 (例如 D:\\Backup): ").strip().strip('"').strip("'")
 
-        # 自动生成配置文件
         config['Settings'] = {
             'password': password,
             'output_dir': output_dir,
@@ -81,36 +112,26 @@ def auto_pack_items():
         print(f"无法创建输出目录: {e}")
         return
 
-    SIZE_THRESHOLD = 1.8 * 1024 * 1024 * 1024  # 1.8 GB 阈值
+    SIZE_THRESHOLD = 1.8 * 1024 * 1024 * 1024
 
-    # --- 扫描与筛选目录和文件 ---
     all_items = os.listdir('.')
     valid_targets = []
     
-    # 获取脚本自身文件名，防止自我打包
     script_name = os.path.basename(__file__) if '__file__' in globals() else sys.argv[0]
     script_name = os.path.basename(script_name)
 
     for f in all_items:
         f_abs = os.path.abspath(f)
-        
-        # 过滤规则：
-        # 1. 跳过输出目录本身（防止死循环）
-        # 2. 跳过隐藏文件/文件夹
-        # 3. 跳过当前运行的脚本本身
-        # 4. 跳过配置文件
         if f_abs == output_dir_abs or f.startswith('.'):
             continue
         if f in [script_name, config_file, 'config.ini'] or f.endswith('.py'):
             continue
-            
         valid_targets.append(f)
 
     if not valid_targets:
         print("当前目录下未找到可打包的项目 (文件或文件夹)。")
         return
 
-    # --- 任务确认与选择 ---
     print(f"\n=== 检测到以下 {len(valid_targets)} 个待处理项目 ===")
     print("  [0] 打包以下全部项目")
     for i, f_name in enumerate(valid_targets, 1):
@@ -138,105 +159,167 @@ def auto_pack_items():
         
         print("输入无效，请重新输入。")
 
+    # --- 字幕文件检测与编组选项 ---
+    subtitle_exts = {'.srt', '.ass', '.ssa', '.vtt', '.sub'}
+    has_subtitles = False
+    for target in selected_targets:
+        if os.path.isfile(target):
+            _, ext = os.path.splitext(target)
+            if ext.lower() in subtitle_exts:
+                has_subtitles = True
+                break
+
+    group_choice = '2'  # 默认关闭编组
+    if has_subtitles:
+        print("\n=== 检测到字幕文件，是否开启【同集数智能编组】功能？ ===")
+        print("开启后，将自动提取集数，把相同集数的视频和字幕（如 01.mp4 与 01.ass）合并打包。")
+        print("  [1] 开启 (自动编组，推荐)")
+        print("  [2] 关闭 (每个文件/文件夹独立打包)")
+        while True:
+            group_choice = input("请输入选择 (1 或 2，默认 1): ").strip()
+            if not group_choice:
+                group_choice = '1'
+                break
+            if group_choice in ['1', '2']:
+                break
+            print("输入无效，请重新输入。")
+
     # --- 命名方式选择 ---
     print("\n=== 请选择分卷文件的命名方式 ===")
     print("  [1] 纯数字命名 (例如 1.7z, 2.7z... 隐匿原名，增强保密性)")
     print("  [2] 原名称命名 (直接使用原文件或文件夹的名字命名)")
+    print("  [3] 智能集数提取命名 (例如 01.7z, 识别失败自动回退至原名称命名)")
     naming_choice = ""
     while True:
-        naming_choice = input("请输入对应的数字进行选择 (1 或 2): ").strip()
-        if naming_choice in ['1', '2']:
+        naming_choice = input("请输入对应的数字进行选择 (1, 2 或 3): ").strip()
+        if naming_choice in ['1', '2', '3']:
             break
         print("输入无效，请重新输入。")
+
+    # --- 任务编组处理 ---
+    task_groups = []
+    if group_choice == '1':
+        ep_dict = {}
+        ungrouped = []
+        for target in selected_targets:
+            ep_num = extract_episode_number(target)
+            if ep_num:
+                if ep_num not in ep_dict:
+                    ep_dict[ep_num] = []
+                ep_dict[ep_num].append(target)
+            else:
+                ungrouped.append(target)
+        
+        for ep_num in sorted(ep_dict.keys()):
+            task_groups.append({'key': ep_num, 'items': ep_dict[ep_num], 'is_grouped': True})
+            
+        for item in ungrouped:
+            task_groups.append({'key': item, 'items': [item], 'is_grouped': False})
+    else:
+        for item in selected_targets:
+            task_groups.append({'key': item, 'items': [item], 'is_grouped': False})
 
     # --- 开始打包逻辑 ---
     print("\n准备开始处理...")
     
-    try:
-        if sys.platform == 'win32':
-            os.startfile(output_dir_abs)
-        elif sys.platform == 'darwin':
-            subprocess.Popen(['open', output_dir_abs])
-        else:
-            subprocess.Popen(['xdg-open', output_dir_abs])
-    except Exception as e:
-        print(f"自动打开目录失败: {e}")
-    
-    for target_name in selected_targets:
+    for task in task_groups:
+        items = task['items']
+        is_grouped = task['is_grouped']
+        group_key = task['key']
+        
+        total_size = 0
+        main_item = items[0]
+        max_size = -1
+        
+        for item in items:
+            item_path = os.path.abspath(item)
+            if os.path.isdir(item_path):
+                size = get_dir_size(item_path)
+            else:
+                size = os.path.getsize(item_path)
+                
+            total_size += size
+            if size > max_size:
+                max_size = size
+                main_item = item
+
+        type_label = "文件组" if len(items) > 1 else ("文件夹" if os.path.isdir(items[0]) else "文件")
         print(f"\n--------------------------------------------------")
-        target_path = os.path.abspath(target_name)
-        
-        # 判断是文件还是文件夹，分别计算大小
-        if os.path.isdir(target_path):
-            target_size = get_dir_size(target_path)
-            type_label = "文件夹"
+        if len(items) > 1:
+            print(f"[-] 正在分析{type_label}: 包含 {len(items)} 个项目 (归集识别码: {group_key})")
+            for it in items:
+                print(f"    - {it}")
         else:
-            target_size = os.path.getsize(target_path)
-            type_label = "文件"
-            
-        print(f"[-] 正在分析{type_label}: {target_name}")
+            print(f"[-] 正在分析{type_label}: {items[0]}")
         
-        # --- 确定输出文件名 ---
         if naming_choice == '1':
-            # 方式1：自动寻找可用的数字命名 (1.7z, 2.7z, ...)
             base_num = 1
             while True:
                 final_name = f"{base_num}.7z"
                 output_file_path = os.path.join(output_dir_abs, final_name)
                 if glob.glob(output_file_path + "*"):
-                    base_num += 1  # 如果被占用了，数字+1继续找
+                    base_num += 1
                 else:
                     break
         else:
-            # 方式2：使用原名称命名
-            if os.path.isdir(target_path):
-                base_name = target_name
-            else:
-                # 针对文件，去除原有的后缀名，使压缩包名更干净
-                base_name = os.path.splitext(target_name)[0]
+            base_name = ""
+            
+            if naming_choice == '3':
+                if is_grouped:
+                    base_name = group_key
+                    print(f"    [!] 成功提取集数：{group_key}")
+                else:
+                    ep_num = extract_episode_number(main_item)
+                    if ep_num:
+                        base_name = ep_num
+                        print(f"    [!] 成功提取集数：{ep_num}")
+                    else:
+                        print(f"    [!] 集数识别失败，触发回退机制（使用主文件名）。")
+            
+            if not base_name:
+                if os.path.isdir(main_item):
+                    base_name = main_item
+                else:
+                    base_name = os.path.splitext(main_item)[0]
                 
             final_name = f"{base_name}.7z"
             output_file_path = os.path.join(output_dir_abs, final_name)
             
-            # 检查输出目录中是否已有同名文件，防止相互覆盖
             conflict_num = 1
             while glob.glob(output_file_path + "*"):
                 final_name = f"{base_name}_{conflict_num}.7z"
                 output_file_path = os.path.join(output_dir_abs, final_name)
                 conflict_num += 1
 
-        is_split = target_size > SIZE_THRESHOLD
+        is_split = total_size > SIZE_THRESHOLD
         
-        # 初始化基础命令
         cmd = [
             ARCHIVER_CMD, 'a',
             '-t7z', 
-            '-mx=0',            # 仅存储
-            f'-p{password}',    # 加密密码
-            '-mhe=on',          # 加密文件名
-            output_file_path,
-            target_path
+            '-mx=0',            
+            f'-p{password}',    
+            '-mhe=on'           
         ]
         
         if is_split:
-            estimated_vols = int(target_size / (1024 ** 3)) + 5
-            
-            split_args = []
+            estimated_vols = int(total_size / (1024 ** 3)) + 5
             for _ in range(estimated_vols):
                 split_gib = random.triangular(1.65, 1.8, 1.8)
                 split_mb = int(split_gib * 1024)
-                split_args.append(f'-v{split_mb}m')
+                cmd.append(f'-v{split_mb}m')
             
-            print(f"    > {type_label}总大小 {(target_size / (1024**3)):.2f} GB，启用不规则随机分卷")
+            print(f"    > {type_label}总大小 {(total_size / (1024**3)):.2f} GB，启用不规则随机分卷")
             print(f"    > 输出路径: {output_file_path} (分卷)")
-            
-            cmd = cmd[:-2] + split_args + cmd[-2:]
         else:
             print(f"    > 输出路径: {output_file_path}")
+            
+        cmd.append(output_file_path)
+        for it in items:
+            cmd.append(os.path.abspath(it))
         
         try:
             subprocess.run(cmd, check=True)
-            print(f"    [√] [{target_name}] 打包成功，已命名为 -> {final_name}")
+            print(f"    [√] [{final_name}] 打包成功！")
         except subprocess.CalledProcessError as e:
             print(f"    [X] 7z 运行出错: {e}")
         except Exception as e:
