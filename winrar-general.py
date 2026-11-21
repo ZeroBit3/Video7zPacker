@@ -8,12 +8,13 @@ import sys
 import re
 import math
 
+
 def get_rar_executable():
     """查找 WinRAR 命令行程序 (优先 rar.exe，其次 WinRAR.exe)"""
     for cmd in ['rar', 'WinRAR']:
         if shutil.which(cmd):
             return cmd
-            
+
     fallback_paths = [
         r"C:\Program Files\WinRAR\Rar.exe",
         r"C:\Program Files\WinRAR\WinRAR.exe",
@@ -23,8 +24,9 @@ def get_rar_executable():
     for path in fallback_paths:
         if os.path.exists(path):
             return path
-            
+
     return None
+
 
 def get_dir_size(folder_path):
     """递归计算文件夹总大小（字节）"""
@@ -36,19 +38,20 @@ def get_dir_size(folder_path):
                 total_size += os.path.getsize(fp)
     return total_size
 
+
 def extract_episode_number(filename):
     """提取文件或文件夹的集数（强特征匹配 + 特征降噪兜底）"""
     base_name, _ = os.path.splitext(filename)
-    
+
     # === 第一步：强特征匹配 ===
     match_en = re.search(r'(?i)e(?:p)?\s*0*(\d{1,4})', base_name)
     if match_en:
         return match_en.group(1).zfill(2)
-        
+
     match_zh = re.search(r'第\s*0*(\d+)\s*[集话]', base_name)
     if match_zh:
         return match_zh.group(1).zfill(2)
-        
+
     # === 第二步：特征降噪与弱匹配 ===
     noise_patterns = [
         r'(?i)(1080p|2160p|4k|720p)',
@@ -57,16 +60,17 @@ def extract_episode_number(filename):
         r'(?i)(10bit|8bit|web-dl|bluray|bdrip|tvrip)',
         r'(19\d{2}|20\d{2})'
     ]
-    
+
     cleaned_name = base_name
     for pattern in noise_patterns:
         cleaned_name = re.sub(pattern, ' ', cleaned_name)
-        
+
     match_weak = re.search(r'(?<![a-zA-Z\d])(\d{1,4})(?![a-zA-Z\d])', cleaned_name)
     if match_weak:
         return match_weak.group(1).zfill(2)
-        
+
     return None
+
 
 def get_conflict_pattern(output_dir_abs, base_name):
     """生成用于检测命名冲突的通配符列表（兼容单文件、partN分卷及rev恢复卷）"""
@@ -77,11 +81,13 @@ def get_conflict_pattern(output_dir_abs, base_name):
         os.path.join(output_dir_abs, f"{base_name}.rev")
     ]
 
+
 def has_naming_conflict(output_dir_abs, base_name):
     for pattern in get_conflict_pattern(output_dir_abs, base_name):
         if glob.glob(pattern):
             return True
     return False
+
 
 def calculate_small_file_volumes(total_size):
     """
@@ -89,7 +95,7 @@ def calculate_small_file_volumes(total_size):
     - 对于极小文件（如几 KB 的文本/配置文件），允许低至 1KB 每卷，确保能够切出多卷并成功生成恢复卷。
     """
     total_kb = max(1, math.ceil(total_size / 1024))
-    
+
     # 如果文件极小（小于 4 KB），直接设为 1 KB 一卷，强制分卷以支持恢复卷
     if total_kb < 4:
         vol_kb = 1
@@ -104,12 +110,29 @@ def calculate_small_file_volumes(total_size):
 
         vol_kb = max(1, math.ceil(total_kb / target_vols))
         actual_vols = math.ceil(total_kb / vol_kb)
-        
+
     return vol_kb, actual_vols
 
+
+def generate_random_volume_sizes_mb(total_size):
+    """
+    为超过阈值的项目生成随机单卷大小列表（单位：MB），
+    分布范围与 Pack_7z_general.py 一致：random.triangular(1.65, 1.8, 1.8)。
+    额外多生成几个分卷尺寸作为余量，避免估算卷数偏少。
+    """
+    min_vol_bytes = 1.65 * 1024 * 1024 * 1024
+    estimated_vols = math.ceil(total_size / min_vol_bytes) + 5
+    vol_sizes_mb = []
+    for _ in range(estimated_vols):
+        split_gib = random.triangular(1.65, 1.8, 1.8)
+        split_mb = max(1, int(split_gib * 1024))
+        vol_sizes_mb.append(split_mb)
+    return vol_sizes_mb
+
+
 def auto_pack_items():
-    print("=== 自动分卷加密打包程序 (WinRAR + 极小文件强制分卷抗损版) ===")
-    
+    print("=== 自动分卷加密打包程序 (WinRAR 随机分卷 + 极小文件强制分卷抗损版) ===")
+
     ARCHIVER_CMD = get_rar_executable()
     if not ARCHIVER_CMD:
         print("错误: 系统找不到 'rar' 或 'WinRAR' 命令，且默认安装路径不存在。")
@@ -118,7 +141,7 @@ def auto_pack_items():
 
     config_file = 'config_movie.ini'
     config = configparser.ConfigParser()
-    
+
     password = ""
     output_dir = ""
 
@@ -130,12 +153,12 @@ def auto_pack_items():
             print(f"[+] 检测到 {config_file}，已加载配置。")
     else:
         print(f"[-] 未检测到 {config_file}，请进行初始设置。")
-        
+
         password = input("请输入加密密码: ").strip()
         while not password:
             print("错误: 密码不能为空")
             password = input("请输入加密密码: ").strip()
-            
+
         output_dir = input("请输入输出目录路径 (例如 D:\\Backup): ").strip().strip('"').strip("'")
         while not output_dir:
             print("错误: 输出目录不能为空")
@@ -164,7 +187,7 @@ def auto_pack_items():
 
     all_items = os.listdir('.')
     valid_targets = []
-    
+
     script_name = os.path.basename(__file__) if '__file__' in globals() else sys.argv[0]
     script_name = os.path.basename(script_name)
 
@@ -193,7 +216,7 @@ def auto_pack_items():
         if choice.lower() == 'q':
             print("退出程序。")
             return
-        
+
         if choice.isdigit():
             idx = int(choice)
             if idx == 0:
@@ -204,7 +227,7 @@ def auto_pack_items():
                 selected_targets = [valid_targets[idx - 1]]
                 print(f"\n[+] 已选择：仅打包 [{valid_targets[idx - 1]}]。")
                 break
-        
+
         print("输入无效，请重新输入。")
 
     # --- 字幕文件检测与编组选项 ---
@@ -257,10 +280,10 @@ def auto_pack_items():
                 ep_dict[ep_num].append(target)
             else:
                 ungrouped.append(target)
-        
+
         for ep_num in sorted(ep_dict.keys()):
             task_groups.append({'key': ep_num, 'items': ep_dict[ep_num], 'is_grouped': True})
-            
+
         for item in ungrouped:
             task_groups.append({'key': item, 'items': [item], 'is_grouped': False})
     else:
@@ -269,23 +292,23 @@ def auto_pack_items():
 
     # --- 开始打包逻辑 ---
     print("\n准备开始处理...")
-    
+
     for task in task_groups:
         items = task['items']
         is_grouped = task['is_grouped']
         group_key = task['key']
-        
+
         total_size = 0
         main_item = items[0]
         max_size = -1
-        
+
         for item in items:
             item_path = os.path.abspath(item)
             if os.path.isdir(item_path):
                 size = get_dir_size(item_path)
             else:
                 size = os.path.getsize(item_path)
-                
+
             total_size += size
             if size > max_size:
                 max_size = size
@@ -299,7 +322,7 @@ def auto_pack_items():
                 print(f"    - {it}")
         else:
             print(f"[-] 正在分析{type_label}: {items[0]}")
-        
+
         if naming_choice == '1':
             base_num = 1
             while True:
@@ -311,7 +334,7 @@ def auto_pack_items():
                     break
         else:
             base_name = ""
-            
+
             if naming_choice == '3':
                 if is_grouped:
                     base_name = group_key
@@ -323,13 +346,13 @@ def auto_pack_items():
                         print(f"    [!] 成功提取集数：{ep_num}")
                     else:
                         print(f"    [!] 集数识别失败，触发回退机制（使用主文件名）。")
-            
+
             if not base_name:
                 if os.path.isdir(main_item):
                     base_name = main_item
                 else:
                     base_name = os.path.splitext(main_item)[0]
-                
+
             final_base = base_name
             conflict_num = 1
             while has_naming_conflict(output_dir_abs, final_base):
@@ -350,11 +373,17 @@ def auto_pack_items():
 
         is_large = total_size > SIZE_THRESHOLD
         if is_large:
-            split_gib = random.triangular(1.65, 1.8, 1.8)
-            split_mb = int(split_gib * 1024)
-            cmd.append(f'-v{split_mb}m')
-            est_vols = max(1, math.ceil(total_size / (split_mb * 1024 * 1024)))
-            print(f"    > {type_label}总大小 {(total_size / (1024**3)):.2f} GB（超阈值），单卷 {split_mb} MB（约 {est_vols} 个数据卷 + 2 个恢复卷）")
+            vol_sizes_mb = generate_random_volume_sizes_mb(total_size)
+            for split_mb in vol_sizes_mb:
+                cmd.append(f'-v{split_mb}m')
+
+            preview_vols = vol_sizes_mb[:6]
+            preview_str = ", ".join(f"{m}MB" for m in preview_vols)
+            if len(vol_sizes_mb) > 6:
+                preview_str += f", ... (共生成 {len(vol_sizes_mb)} 个随机卷规则)"
+
+            print(f"    > {type_label}总大小 {(total_size / (1024**3)):.2f} GB（超阈值），启用不规则随机分卷")
+            print(f"    > 随机分卷序列: {preview_str} (+ 2 个恢复卷)")
         else:
             vol_kb, actual_vols = calculate_small_file_volumes(total_size)
             cmd.append(f'-v{vol_kb}k')
@@ -369,7 +398,7 @@ def auto_pack_items():
         cmd.append(output_file_path)
         for it in items:
             cmd.append(os.path.abspath(it))
-        
+
         try:
             subprocess.run(cmd, check=True)
             print(f"    [√] [{final_base}] 打包及恢复卷生成成功！")
@@ -377,6 +406,7 @@ def auto_pack_items():
             print(f"    [X] WinRAR 运行出错 (退出码 {e.returncode}): {e}")
         except Exception as e:
             print(f"    [X] 未知错误: {e}")
+
 
 if __name__ == '__main__':
     try:
