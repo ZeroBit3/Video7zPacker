@@ -89,29 +89,36 @@ def has_naming_conflict(output_dir_abs, base_name):
     return False
 
 
-def calculate_small_file_volumes(total_size):
+def generate_small_volume_sizes_kb(total_size):
     """
-    针对小于阈值（1.8GB）的文件计算合理的分卷大小（单位：KB）：
-- 对于极小文件（如几 KB 的文本/配置文件），允许低至 1KB 每卷，确保能够切出多卷并成功生成恢复卷。
+    针对小于阈值（1.8GB）的文件生成带小幅随机波动的单卷大小列表（单位：KB）：
+    - 极小文件（< 4 KB）：保持 1 KB 每卷，保证能切分并生成恢复卷。
+    - 普通小文件：按体积确定大致基准卷数（3 / 4 / 5 卷），每卷在基准值附近做 ±25% 随机浮动，
+      并额外多生成 3 个余量分卷，避免切分时卷数不够。
     """
     total_kb = max(1, math.ceil(total_size / 1024))
 
-    # 如果文件极小（小于 4 KB），直接设为 1 KB 一卷，强制分卷以支持恢复卷
     if total_kb < 4:
-        vol_kb = 1
-        actual_vols = total_kb
-    else:
-        if total_size < 100 * 1024 * 1024:          # < 100 MB -> 分 3 卷
-            target_vols = 3
-        elif total_size < 800 * 1024 * 1024:        # 100 MB ~ 800 MB -> 分 4 卷
-            target_vols = 4
-        else:                                       # 800 MB ~ 1.8 GB -> 分 5 卷
-            target_vols = 5
+        return [1] * total_kb, True
 
-        vol_kb = max(1, math.ceil(total_kb / target_vols))
-        actual_vols = math.ceil(total_kb / vol_kb)
+    if total_size < 100 * 1024 * 1024:          # < 100 MB -> 基准约 3 卷
+        base_vols = 3
+    elif total_size < 800 * 1024 * 1024:        # 100 MB ~ 800 MB -> 基准约 4 卷
+        base_vols = 4
+    else:                                       # 800 MB ~ 1.8 GB -> 基准约 5 卷
+        base_vols = 5
 
-    return vol_kb, actual_vols
+    base_kb = max(1, math.ceil(total_kb / base_vols))
+    # 考虑到可能出现偏小的随机卷，生成 base_vols + 3 个规则作为余量
+    rule_count = base_vols + 3
+
+    vol_sizes_kb = []
+    for _ in range(rule_count):
+        factor = random.uniform(0.75, 1.25)
+        split_kb = max(1, int(round(base_kb * factor)))
+        vol_sizes_kb.append(split_kb)
+
+    return vol_sizes_kb, False
 
 
 def generate_random_volume_sizes_mb(total_size):
@@ -389,13 +396,21 @@ def auto_pack_items():
             print(f"    > {type_label}总大小 {(total_size / (1024**3)):.2f} GB（超阈值），启用不规则随机分卷")
             print(f"    > 随机分卷序列: {preview_str} (+ {rev_count} 个恢复卷)")
         else:
-            vol_kb, actual_vols = calculate_small_file_volumes(total_size)
-            cmd.append(f'-v{vol_kb}k')
-            if total_size < 4 * 1024:
-                print(f"    > {type_label}为极小文件（{total_size} 字节），强制切分为 {actual_vols} 个数据卷（单卷 {vol_kb} KB）+ {rev_count} 个恢复卷")
+            vol_sizes_kb, is_tiny = generate_small_volume_sizes_kb(total_size)
+            for split_kb in vol_sizes_kb:
+                cmd.append(f'-v{split_kb}k')
+
+            preview_vols = vol_sizes_kb[:6]
+            preview_str = ", ".join(f"{k}KB" for k in preview_vols)
+            if len(vol_sizes_kb) > 6:
+                preview_str += f", ... (共生成 {len(vol_sizes_kb)} 个分卷规则)"
+
+            if is_tiny:
+                print(f"    > {type_label}为极小文件（{total_size} 字节），按 1KB 切分（约 {len(vol_sizes_kb)} 卷）+ {rev_count} 个恢复卷")
             else:
                 size_mb = total_size / (1024 * 1024)
-                print(f"    > {type_label}总大小 {size_mb:.2f} MB（低于阈值），智能切分为 {actual_vols} 个数据卷（单卷 {vol_kb} KB）+ {rev_count} 个恢复卷")
+                print(f"    > {type_label}总大小 {size_mb:.2f} MB（低于阈值），启用小幅随机分卷")
+                print(f"    > 随机分卷序列: {preview_str} (+ {rev_count} 个恢复卷)")
 
         print(f"    > 输出路径: {os.path.join(output_dir_abs, final_base)}.part*.rar (+ {rev_count} 个 .rev)")
 
