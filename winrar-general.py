@@ -92,7 +92,7 @@ def has_naming_conflict(output_dir_abs, base_name):
 def calculate_small_file_volumes(total_size):
     """
     针对小于阈值（1.8GB）的文件计算合理的分卷大小（单位：KB）：
-    - 对于极小文件（如几 KB 的文本/配置文件），允许低至 1KB 每卷，确保能够切出多卷并成功生成恢复卷。
+- 对于极小文件（如几 KB 的文本/配置文件），允许低至 1KB 每卷，确保能够切出多卷并成功生成恢复卷。
     """
     total_kb = max(1, math.ceil(total_size / 1024))
 
@@ -184,6 +184,7 @@ def auto_pack_items():
         return
 
     SIZE_THRESHOLD = 1.8 * 1024 * 1024 * 1024
+    REV_SIZE_THRESHOLD = 10 * 1024 * 1024 * 1024  # 10 GB 恢复卷阈值
 
     all_items = os.listdir('.')
     valid_targets = []
@@ -362,13 +363,16 @@ def auto_pack_items():
         final_name = f"{final_base}.rar"
         output_file_path = os.path.join(output_dir_abs, final_name)
 
+        # 小于 10GB 保留 1 个恢复卷，超过（含等于）10GB 生成 2 个恢复卷
+        rev_count = 2 if total_size >= REV_SIZE_THRESHOLD else 1
+
         cmd = [
             ARCHIVER_CMD, 'a',
             '-m0',
             f'-hp{password}',
             '-ep1',
             '-r',
-            '-rv2'
+            f'-rv{rev_count}'
         ]
 
         is_large = total_size > SIZE_THRESHOLD
@@ -383,17 +387,17 @@ def auto_pack_items():
                 preview_str += f", ... (共生成 {len(vol_sizes_mb)} 个随机卷规则)"
 
             print(f"    > {type_label}总大小 {(total_size / (1024**3)):.2f} GB（超阈值），启用不规则随机分卷")
-            print(f"    > 随机分卷序列: {preview_str} (+ 2 个恢复卷)")
+            print(f"    > 随机分卷序列: {preview_str} (+ {rev_count} 个恢复卷)")
         else:
             vol_kb, actual_vols = calculate_small_file_volumes(total_size)
             cmd.append(f'-v{vol_kb}k')
             if total_size < 4 * 1024:
-                print(f"    > {type_label}为极小文件（{total_size} 字节），强制切分为 {actual_vols} 个数据卷（单卷 {vol_kb} KB）+ 2 个恢复卷")
+                print(f"    > {type_label}为极小文件（{total_size} 字节），强制切分为 {actual_vols} 个数据卷（单卷 {vol_kb} KB）+ {rev_count} 个恢复卷")
             else:
                 size_mb = total_size / (1024 * 1024)
-                print(f"    > {type_label}总大小 {size_mb:.2f} MB（低于阈值），智能切分为 {actual_vols} 个数据卷（单卷 {vol_kb} KB）+ 2 个恢复卷")
+                print(f"    > {type_label}总大小 {size_mb:.2f} MB（低于阈值），智能切分为 {actual_vols} 个数据卷（单卷 {vol_kb} KB）+ {rev_count} 个恢复卷")
 
-        print(f"    > 输出路径: {os.path.join(output_dir_abs, final_base)}.part*.rar (+ 2 个 .rev)")
+        print(f"    > 输出路径: {os.path.join(output_dir_abs, final_base)}.part*.rar (+ {rev_count} 个 .rev)")
 
         cmd.append(output_file_path)
         for it in items:
